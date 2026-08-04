@@ -3,8 +3,8 @@
 #
 # Needs Starter plan (private services + workers). Free tier cannot run this.
 #
-# Render injects service env vars as Docker build-args automatically (no dockerBuildArgs field).
-# After first deploy, if migrate did not run, Shell on pulse-api:
+# When prompted, set the SAME POSTGRES_PASSWORD on timescale + api + workers.
+# After first deploy, if DB empty, Shell on pulse-api:
 #   pnpm --filter @pulse/db migrate:prod
 
 services:
@@ -69,6 +69,11 @@ services:
           property: host
       - key: POSTGRES_PASSWORD
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString
 
   - type: web
     name: pulse-web
@@ -107,6 +112,11 @@ services:
           property: host
       - key: POSTGRES_PASSWORD
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString
 
   - type: worker
     name: pulse-probe
@@ -128,6 +138,11 @@ services:
           property: host
       - key: POSTGRES_PASSWORD
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString
 
   - type: worker
     name: pulse-ingestor
@@ -147,6 +162,11 @@ services:
           property: host
       - key: POSTGRES_PASSWORD
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString
 
   - type: worker
     name: pulse-alerter
@@ -166,6 +186,11 @@ services:
           property: host
       - key: POSTGRES_PASSWORD
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString
       - key: SLACK_WEBHOOK_URL
         sync: false
       - key: ALERT_WEBHOOK_URL
@@ -182,8 +207,3 @@ envVarGroups:
         value: pulse-redpanda:9092
       - key: REGION
         value: all
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: pulse-redis
-          property: connectionString
