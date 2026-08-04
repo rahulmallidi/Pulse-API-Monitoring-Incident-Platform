@@ -1,0 +1,31 @@
+{
+  "name": "@pulse/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"lint not configured\"",
+    "test": "echo \"no tests yet\"",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push --accept-data-loss",
+    "schema:relational": "node ./scripts/apply-relational-migrations.js",
+    "timescale:migrate": "node ./scripts/run-timescale-migrations.js",
+    "seed:demo": "node ./scripts/seed-demo.js",
+    "bootstrap": "node ./scripts/bootstrap-db.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "pg": "^8.13.1",
+    "pg-types": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.11",
+    "prisma": "^5.20.0"
+  }
+}

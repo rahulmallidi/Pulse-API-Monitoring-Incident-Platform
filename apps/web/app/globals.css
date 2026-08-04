@@ -1,0 +1,139 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg-primary: #f4efe6;
+  --card-bg: #fffaf2;
+  --border-color: #d8c9b0;
+  --border-subtle: #efe3d1;
+  --text-primary: #2e2215;
+  --text-muted: #7a6651;
+  --accent-blue: #c2410c;
+  --status-healthy: #0f766e;
+  --status-degraded: #b45309;
+  --status-down: #be123c;
+  --status-maintenance: #64748b;
+  --status-nodata: #94a3b8;
+  --row-hover-bg: #fbf1e4;
+  --row-selected-bg: #f5e3cb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg-primary: #10131a;
+    --card-bg: #181e28;
+    --border-color: #2c3442;
+    --border-subtle: #232b38;
+    --text-primary: #f5efe6;
+    --text-muted: #b8ad9c;
+    --accent-blue: #fb923c;
+    --status-healthy: #2dd4bf;
+    --status-degraded: #f59e0b;
+    --status-down: #fb7185;
+    --status-maintenance: #94a3b8;
+    --status-nodata: #64748b;
+    --row-hover-bg: #202838;
+    --row-selected-bg: #2b3548;
+  }
+}
+
+body {
+  @apply bg-pulse-bg text-pulse-text;
+  margin: 0;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.panel-card {
+  border: 1px solid rgba(206, 219, 228, 0.95);
+  border-color: var(--border-color);
+  border-radius: 6px;
+  background: var(--card-bg);
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kpi-value {
+  margin-top: 6px;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.kpi-delta {
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chip {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.chip-active {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: rgba(194, 65, 12, 0.14);
+}
+
+.panel-menu {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1px 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.table-row-hover:hover {
+  background: var(--row-hover-bg);
+}
+
+.table-row-selected {
+  background: var(--row-selected-bg);
+}
+
+.heat-maintenance {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.35),
+    rgba(255, 255, 255, 0.35) 2px,
+    rgba(107, 114, 128, 1) 2px,
+    rgba(107, 114, 128, 1) 4px
+  );
+}
+
+.probe-row-enter {
+  animation: fade-in 150ms ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mono {
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}

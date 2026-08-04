@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "5.0",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@pulse/contracts": ["packages/contracts/dist"],
+      "@pulse/core": ["packages/core/dist"],
+      "@pulse/db": ["packages/db/dist"],
+      "@pulse/ui": ["packages/ui/dist"],
+      "@pulse/runtime": ["packages/runtime/dist"]
+    }
+  }
+}

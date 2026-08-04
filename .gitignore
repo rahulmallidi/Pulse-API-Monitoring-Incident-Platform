@@ -1,0 +1,32 @@
+# Dependencies & caches
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+!.env*.example
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# Local scratch
+markdown/
+.vercel
+
+# Private / personal artifacts (not for public repo)
+docs/resume-bullets.md
+docs/verified-metrics.json
+
+# Accidental tsc emit next to TypeScript sources
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts

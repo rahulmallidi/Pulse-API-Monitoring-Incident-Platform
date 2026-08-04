@@ -1,0 +1,23 @@
+{
+  "name": "pulse",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev:stack": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-stack.ps1",
+    "dev:stack:fast": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-stack.ps1 -SkipBootstrap",
+    "dev:stack:force": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-stack.ps1 -SkipBootstrap -ForceFreePorts",
+    "dev:stack:down": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-stack-down.ps1",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "smoke:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/smoke-e2e.ps1",
+    "test": "turbo run test",
+    "test:unit": "pnpm --filter @pulse/core test && pnpm --filter @pulse/contracts test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.3",
+    "typescript": "^5.6.3"
+  }
+}

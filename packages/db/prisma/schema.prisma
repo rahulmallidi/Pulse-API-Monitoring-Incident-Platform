@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String    @id @default(uuid()) @db.Uuid
+  slug      String    @unique
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  users     User[]
+  checks    Check[]
+  incidents Incident[]
+  notifiers Notifier[]
+  alertRules AlertRule[]
+  maintenanceWindows MaintenanceWindow[]
+  slos      Slo[]
+
+  @@map("tenants")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  email     String   @unique
+  role      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Check {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String
+  type       String
+  configJson Json     @map("config_jsonb")
+  intervalS  Int      @map("interval_s")
+  regions    String[]
+  tags       String[]
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  incidents  Incident[]
+
+  @@index([tenantId])
+  @@map("checks")
+}
+
+model Incident {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  checkId     String    @map("check_id") @db.Uuid
+  fingerprint String
+  state       String
+  severity    String
+  source      String    @default("pulse")
+  vendorTag   String?   @map("vendor_tag")
+  correlationStatus String? @map("correlation_status")
+  correlatedVendorIncidentId String? @map("correlated_vendor_incident_id")
+  confirmedByVendorAt DateTime? @map("confirmed_by_vendor_at") @db.Timestamptz(6)
+  openedAt    DateTime  @map("opened_at") @db.Timestamptz(6)
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(6)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  check       Check     @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  updates     IncidentUpdate[]
+
+  @@index([tenantId, checkId])
+  @@index([vendorTag, state])
+  @@map("incidents")
+}
+
+model VendorComponent {
+  id         String   @id @default(uuid()) @db.Uuid
+  vendorTag  String   @map("vendor_tag")
+  componentId String  @map("component_id")
+  name       String
+  status     String
+  updatedAt  DateTime @map("updated_at") @db.Timestamptz(6)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+
+  @@unique([vendorTag, componentId])
+  @@index([vendorTag, status])
+  @@map("vendor_components")
+}
+
+model VendorIncident {
+  id                 String    @id @default(uuid()) @db.Uuid
+  vendorTag          String    @map("vendor_tag")
+  incidentId         String    @map("incident_id")
+  name               String
+  status             String
+  impact             String
+  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
+  resolvedAt         DateTime? @map("resolved_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @map("updated_at") @db.Timestamptz(6)
+  affectedComponents Json      @map("affected_components_jsonb")
+  updates            Json      @map("updates_jsonb")
+  sourceUrl          String?   @map("source_url")
+  firstSeenAt        DateTime  @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+
+  @@unique([vendorTag, incidentId])
+  @@index([vendorTag, status, updatedAt])
+  @@map("vendor_incidents")
+}
+
+model VendorPollState {
+  id                  String    @id @default(uuid()) @db.Uuid
+  vendorTag           String    @unique @map("vendor_tag")
+  host                String
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  isStale             Boolean   @default(false) @map("is_stale")
+  lastSuccessAt       DateTime? @map("last_success_at") @db.Timestamptz(6)
+  lastAttemptAt       DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  lastError           String?   @map("last_error")
+  backoffUntil        DateTime? @map("backoff_until") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("vendor_poll_states")
+}
+
+model IncidentUpdate {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @map("incident_id") @db.Uuid
+  authorId   String?  @map("author_id") @db.Uuid
+  message    String
+  state      String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@map("incident_updates")
+}
+
+model AlertRule {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  checkSelector Json     @map("check_selector_jsonb")
+  condition     Json     @map("condition_jsonb")
+  severity      String
+  notifierIds   String[] @map("notifier_ids")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("alert_rules")
+}
+
+model Notifier {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  type       String
+  configJson Json     @map("config_jsonb")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("notifiers")
+}
+
+model MaintenanceWindow {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  targets    Json     @map("targets_jsonb")
+  startsAt   DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt     DateTime @map("ends_at") @db.Timestamptz(6)
+  reason     String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt, endsAt])
+  @@map("maintenance_windows")
+}
+
+model Slo {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  targetPct Decimal  @map("target_pct") @db.Decimal(5, 3)
+  windowDays Int     @map("window_days")
+  checkIds  String[] @map("check_ids")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("slos")
+}

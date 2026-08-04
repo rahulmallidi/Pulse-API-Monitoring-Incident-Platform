@@ -1,0 +1,18 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build caches
+.turbo
+**/.next/cache
+coverage
+dist
+.git
+
+# Local / secrets
+.env
+.env.*
+!.env.example
+.vercel
+markdown
+*.log
