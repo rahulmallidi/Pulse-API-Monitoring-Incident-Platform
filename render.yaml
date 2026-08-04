@@ -1,9 +1,10 @@
 # Pulse — Render Blueprint (full stack)
-# Dashboard: https://dashboard.render.com/blueprints/new
+# https://dashboard.render.com/blueprints/new
 #
-# Expectation: Starter plan (private services + workers). Free tier cannot run this stack.
+# Needs Starter plan (private services + workers). Free tier cannot run this.
 #
-# After first healthy deploy of pulse-api, run DB migrate once (Render Shell on pulse-api):
+# Render injects service env vars as Docker build-args automatically (no dockerBuildArgs field).
+# After first deploy, if migrate did not run, Shell on pulse-api:
 #   pnpm --filter @pulse/db migrate:prod
 
 services:
@@ -25,11 +26,12 @@ services:
       sizeGB: 10
     dockerCommand: docker-entrypoint.sh postgres -p 5432
     envVars:
-      - fromGroup: pulse-shared
       - key: POSTGRES_USER
         value: pulse
       - key: POSTGRES_DB
         value: pulse
+      - key: POSTGRES_PASSWORD
+        sync: false
 
   - type: pserv
     name: pulse-redpanda
@@ -45,27 +47,28 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: api
     dockerCommand: sh deploy/render-start.sh api
     healthCheckPath: /health
+    initialDeployHook: pnpm --filter @pulse/db migrate:prod
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: api
       - key: PORT
         value: "10000"
       - key: CORS_ALLOW_VERCEL
         value: "true"
+      - key: CORS_ORIGIN
+        value: https://pulse-web.onrender.com
       - key: PULSE_WEB_HOST
-        fromService:
-          type: web
-          name: pulse-web
-          property: host
+        value: https://pulse-web.onrender.com
       - key: PULSE_DB_HOST
         fromService:
           type: pserv
           name: pulse-timescale
           property: host
+      - key: POSTGRES_PASSWORD
+        sync: false
 
   - type: web
     name: pulse-web
@@ -73,23 +76,17 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: web
-      - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://pulse-api.onrender.com
     dockerCommand: sh deploy/render-start.sh web
     healthCheckPath: /
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: web
       - key: PORT
         value: "10000"
-      - key: PULSE_API_HOST
-        fromService:
-          type: web
-          name: pulse-api
-          property: host
       - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://pulse-api.onrender.com
+      - key: PULSE_API_HOST
         value: https://pulse-api.onrender.com
 
   - type: worker
@@ -98,17 +95,18 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: scheduler
     dockerCommand: sh deploy/render-start.sh scheduler
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: scheduler
       - key: PULSE_DB_HOST
         fromService:
           type: pserv
           name: pulse-timescale
           property: host
+      - key: POSTGRES_PASSWORD
+        sync: false
 
   - type: worker
     name: pulse-probe
@@ -116,12 +114,11 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: probe
     dockerCommand: sh deploy/render-start.sh probe
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: probe
       - key: REGION
         value: all
       - key: PULSE_DB_HOST
@@ -129,6 +126,8 @@ services:
           type: pserv
           name: pulse-timescale
           property: host
+      - key: POSTGRES_PASSWORD
+        sync: false
 
   - type: worker
     name: pulse-ingestor
@@ -136,17 +135,18 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: ingestor
     dockerCommand: sh deploy/render-start.sh ingestor
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: ingestor
       - key: PULSE_DB_HOST
         fromService:
           type: pserv
           name: pulse-timescale
           property: host
+      - key: POSTGRES_PASSWORD
+        sync: false
 
   - type: worker
     name: pulse-alerter
@@ -154,17 +154,18 @@ services:
     plan: starter
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    dockerBuildArgs:
-      - key: APP
-        value: alerter
     dockerCommand: sh deploy/render-start.sh alerter
     envVars:
       - fromGroup: pulse-shared
+      - key: APP
+        value: alerter
       - key: PULSE_DB_HOST
         fromService:
           type: pserv
           name: pulse-timescale
           property: host
+      - key: POSTGRES_PASSWORD
+        sync: false
       - key: SLACK_WEBHOOK_URL
         sync: false
       - key: ALERT_WEBHOOK_URL
@@ -181,8 +182,6 @@ envVarGroups:
         value: pulse-redpanda:9092
       - key: REGION
         value: all
-      - key: POSTGRES_PASSWORD
-        generateValue: true
       - key: REDIS_URL
         fromService:
           type: keyvalue

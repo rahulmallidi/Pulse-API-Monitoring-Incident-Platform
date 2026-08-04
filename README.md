@@ -305,9 +305,10 @@ Pulse needs long-running workers, Redis, Kafka (Redpanda), and TimescaleDB. **Re
 1. Push latest code to GitHub (this repo).
 2. Open [https://dashboard.render.com/blueprints/new](https://dashboard.render.com/blueprints/new).
 3. Connect the GitHub repo `Pulse-API-Monitoring-Incident-Platform`.
-4. Render detects root `render.yaml` → review services → **Apply**.
-5. Wait until `pulse-api`, `pulse-web`, workers, `pulse-timescale`, `pulse-redpanda`, and `pulse-redis` are live.
-6. Open **pulse-api** → **Shell** and run DB migrate/seed once:
+4. Render detects root `render.yaml` → review services → **Apply**.  
+   When prompted for **`POSTGRES_PASSWORD`**, enter one strong password and reuse the **same value** for every service that asks (timescale, api, workers).  
+5. Wait until `pulse-api`, `pulse-web`, workers, `pulse-timescale`, `pulse-redpanda`, and `pulse-redis` are live.  
+6. DB migrate usually runs via `initialDeployHook` on `pulse-api`. If tables are missing, open **pulse-api → Shell**:
 
 ```bash
 pnpm --filter @pulse/db migrate:prod
