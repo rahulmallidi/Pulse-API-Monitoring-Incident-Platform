@@ -294,58 +294,51 @@ powershell -File ./scripts/smoke-e2e.ps1 -ApiBaseUrl http://localhost:3000
 
 ## Deploy
 
-### Recommended: Render (frontend + backend together)
+### Recommended free path: Oracle Cloud Always Free VM
 
-Pulse needs long-running workers, Redis, Kafka (Redpanda), and TimescaleDB. **Render Blueprints** can host all of that from one `render.yaml`.
+Run **frontend + backend on one free cloud VM** (not on your laptop).
 
-**Cost:** private services + workers need a **paid Starter plan** (not free tier). Expect multiple Starter instances (API, web, 4 workers, Redis, Timescale, Redpanda).
+Full guide: **[docs/deploy-oracle.md](docs/deploy-oracle.md)**
 
-#### Step-by-step
+Short version:
 
-1. Push latest code to GitHub (this repo).
-2. Open [https://dashboard.render.com/blueprints/new](https://dashboard.render.com/blueprints/new).
-3. Connect the GitHub repo `Pulse-API-Monitoring-Incident-Platform`.
-4. Render detects root `render.yaml` → review services → **Apply**.  
-   When prompted for **`POSTGRES_PASSWORD`**, enter one strong password and reuse the **same value** for every service that asks (timescale, api, workers).  
-5. Wait until `pulse-api`, `pulse-web`, workers, `pulse-timescale`, `pulse-redpanda`, and `pulse-redis` are live.  
-6. DB migrate usually runs via `initialDeployHook` on `pulse-api`. If tables are missing, open **pulse-api → Shell**:
+1. Create an Always Free **Ampere (ARM)** Ubuntu VM in Oracle Cloud  
+2. Open security-list ports **22, 3000, 3005**  
+3. SSH in and run:
 
 ```bash
-pnpm --filter @pulse/db migrate:prod
+git clone https://github.com/rahulmallidi/Pulse-API-Monitoring-Incident-Platform.git
+cd Pulse-API-Monitoring-Incident-Platform
+chmod +x scripts/oracle-vm-bootstrap.sh
+./scripts/oracle-vm-bootstrap.sh
 ```
 
-7. Open the **pulse-web** URL (e.g. `https://pulse-web.onrender.com`).
-8. Optional: set `SLACK_WEBHOOK_URL` / `ALERT_WEBHOOK_URL` on **pulse-alerter** (Blueprint marks them as dashboard secrets).
+4. Open `http://YOUR_PUBLIC_IP:3005`
 
-If your API public URL is not exactly `https://pulse-api.onrender.com` (custom name/region), update `NEXT_PUBLIC_API_BASE_URL` on **pulse-web** and redeploy web.
+---
 
-#### What the Blueprint starts
+### Paid PaaS: Render (Blueprint)
 
-| Service | Role |
-|---------|------|
-| `pulse-web` | Next.js dashboard (public) |
-| `pulse-api` | Control-plane API + SSE (public) |
-| `pulse-scheduler` / `probe` / `ingestor` / `alerter` | Background workers |
-| `pulse-timescale` | TimescaleDB (private) |
-| `pulse-redpanda` | Kafka-compatible bus (private) |
-| `pulse-redis` | Redis / Key Value |
+Pulse needs long-running workers, Redis, Kafka (Redpanda), and TimescaleDB. **Render Blueprints** can host that from `render.yaml` on a **paid Starter** plan (not free).
 
-Files: `render.yaml`, `deploy/Dockerfile`, `deploy/render-start.sh`.
+1. Open [https://dashboard.render.com/blueprints/new](https://dashboard.render.com/blueprints/new)  
+2. Connect this GitHub repo → Apply `render.yaml`  
+3. Enter the **same** `POSTGRES_PASSWORD` wherever prompted  
+4. If needed, Shell on `pulse-api`: `pnpm --filter @pulse/db migrate:prod`
 
 ---
 
 ### Alternative: Vercel dashboard only
 
-Use this if you only want the UI on Vercel and will host API/workers elsewhere.
+UI on Vercel; API/workers must still run elsewhere (e.g. Oracle VM).
 
-1. [vercel.com/new](https://vercel.com/new) → import repo.
-2. **Root Directory:** `apps/web`
-3. Env: `NEXT_PUBLIC_API_BASE_URL=https://<your-public-api>`
-4. On the API host: `CORS_ALLOW_VERCEL=true` and your Vercel origin in `CORS_ORIGIN`
+1. [vercel.com/new](https://vercel.com/new) → import repo → Root Directory `apps/web`  
+2. Env: `NEXT_PUBLIC_API_BASE_URL=http://YOUR_ORACLE_IP:3000`  
+3. API: `CORS_ALLOW_VERCEL=true` + your Vercel origin in `CORS_ORIGIN`
 
 ---
 
-### Local / VM Docker Compose
+### Local Docker / dev stack
 
 ```bash
 pnpm dev:stack:force
@@ -354,11 +347,11 @@ pnpm dev:stack:force
 
 | Path | Purpose |
 |------|---------|
-| `deploy/docker-compose.yml` | Local full stack |
-| `render.yaml` | Render full-stack Blueprint |
+| `docs/deploy-oracle.md` | Free full-stack on Oracle VM |
+| `deploy/docker-compose.oracle.yml` | Cloud VM Compose file |
+| `scripts/oracle-vm-bootstrap.sh` | One-shot VM bootstrap |
+| `render.yaml` | Render Blueprint (paid) |
 | `apps/web/vercel.json` | Vercel web-only config |
-
-Production-style multi-region would run separate probe processes per `REGION` instead of `REGION=all`.
 
 ---
 
