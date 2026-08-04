@@ -1,0 +1,190 @@
+# Pulse — Render Blueprint (full stack)
+# Dashboard: https://dashboard.render.com/blueprints/new
+#
+# Expectation: Starter plan (private services + workers). Free tier cannot run this stack.
+#
+# After first healthy deploy of pulse-api, run DB migrate once (Render Shell on pulse-api):
+#   pnpm --filter @pulse/db migrate:prod
+
+services:
+  - type: keyvalue
+    name: pulse-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+  - type: pserv
+    name: pulse-timescale
+    runtime: image
+    plan: starter
+    image:
+      url: docker.io/timescale/timescaledb:2.16.1-pg16
+    disk:
+      name: pulse-timescale-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 10
+    dockerCommand: docker-entrypoint.sh postgres -p 5432
+    envVars:
+      - fromGroup: pulse-shared
+      - key: POSTGRES_USER
+        value: pulse
+      - key: POSTGRES_DB
+        value: pulse
+
+  - type: pserv
+    name: pulse-redpanda
+    runtime: image
+    plan: starter
+    image:
+      url: docker.io/redpandadata/redpanda:v24.2.10
+    dockerCommand: redpanda start --overprovisioned --smp 1 --memory 512M --reserve-memory 0M --node-id 0 --check=false --kafka-addr internal://0.0.0.0:9092 --advertise-kafka-addr internal://pulse-redpanda:9092 --rpc-addr 0.0.0.0:33145 --advertise-rpc-addr pulse-redpanda:33145
+
+  - type: web
+    name: pulse-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: api
+    dockerCommand: sh deploy/render-start.sh api
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: pulse-shared
+      - key: PORT
+        value: "10000"
+      - key: CORS_ALLOW_VERCEL
+        value: "true"
+      - key: PULSE_WEB_HOST
+        fromService:
+          type: web
+          name: pulse-web
+          property: host
+      - key: PULSE_DB_HOST
+        fromService:
+          type: pserv
+          name: pulse-timescale
+          property: host
+
+  - type: web
+    name: pulse-web
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: web
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://pulse-api.onrender.com
+    dockerCommand: sh deploy/render-start.sh web
+    healthCheckPath: /
+    envVars:
+      - fromGroup: pulse-shared
+      - key: PORT
+        value: "10000"
+      - key: PULSE_API_HOST
+        fromService:
+          type: web
+          name: pulse-api
+          property: host
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://pulse-api.onrender.com
+
+  - type: worker
+    name: pulse-scheduler
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: scheduler
+    dockerCommand: sh deploy/render-start.sh scheduler
+    envVars:
+      - fromGroup: pulse-shared
+      - key: PULSE_DB_HOST
+        fromService:
+          type: pserv
+          name: pulse-timescale
+          property: host
+
+  - type: worker
+    name: pulse-probe
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: probe
+    dockerCommand: sh deploy/render-start.sh probe
+    envVars:
+      - fromGroup: pulse-shared
+      - key: REGION
+        value: all
+      - key: PULSE_DB_HOST
+        fromService:
+          type: pserv
+          name: pulse-timescale
+          property: host
+
+  - type: worker
+    name: pulse-ingestor
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: ingestor
+    dockerCommand: sh deploy/render-start.sh ingestor
+    envVars:
+      - fromGroup: pulse-shared
+      - key: PULSE_DB_HOST
+        fromService:
+          type: pserv
+          name: pulse-timescale
+          property: host
+
+  - type: worker
+    name: pulse-alerter
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      - key: APP
+        value: alerter
+    dockerCommand: sh deploy/render-start.sh alerter
+    envVars:
+      - fromGroup: pulse-shared
+      - key: PULSE_DB_HOST
+        fromService:
+          type: pserv
+          name: pulse-timescale
+          property: host
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+
+envVarGroups:
+  - name: pulse-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: KAFKA_CLIENT_ID
+        value: pulse
+      - key: KAFKA_BROKERS
+        value: pulse-redpanda:9092
+      - key: REGION
+        value: all
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pulse-redis
+          property: connectionString

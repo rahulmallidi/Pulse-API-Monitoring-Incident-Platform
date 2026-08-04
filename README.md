@@ -294,68 +294,68 @@ powershell -File ./scripts/smoke-e2e.ps1 -ApiBaseUrl http://localhost:3000
 
 ## Deploy
 
-### What goes where
+### Recommended: Render (frontend + backend together)
 
-| Piece | Hosting |
-|-------|---------|
-| **Dashboard** (`apps/web`) | **Vercel** (this guide) |
-| API + probe + scheduler + ingestor + alerter | Not on Vercel — need a long-running host (Docker Compose on a VPS, Railway, Fly.io, Render, etc.) |
-| Postgres/Timescale, Redis, Redpanda | Same backend host / managed services |
+Pulse needs long-running workers, Redis, Kafka (Redpanda), and TimescaleDB. **Render Blueprints** can host all of that from one `render.yaml`.
 
-Vercel only runs the Next.js UI. The UI talks to your public API via `NEXT_PUBLIC_API_BASE_URL`.
+**Cost:** private services + workers need a **paid Starter plan** (not free tier). Expect multiple Starter instances (API, web, 4 workers, Redis, Timescale, Redpanda).
 
-### Deploy dashboard to Vercel
+#### Step-by-step
 
-1. Push this repo to GitHub.
-2. [vercel.com/new](https://vercel.com/new) → Import the repo.
-3. Configure the project:
-   - **Root Directory:** `apps/web`
-   - **Framework Preset:** Next.js  
-   - Install/Build are already in `apps/web/vercel.json` (`pnpm install` from monorepo root, then `pnpm --filter @pulse/web build`).
-4. Environment Variables (Production + Preview):
-
-| Name | Value |
-|------|--------|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://<your-public-api-host>` (no trailing slash) |
-
-5. Deploy. Open the Vercel URL and confirm the dashboard loads.
-
-CLI alternative (from repo root, with Vercel CLI logged in):
+1. Push latest code to GitHub (this repo).
+2. Open [https://dashboard.render.com/blueprints/new](https://dashboard.render.com/blueprints/new).
+3. Connect the GitHub repo `Pulse-API-Monitoring-Incident-Platform`.
+4. Render detects root `render.yaml` → review services → **Apply**.
+5. Wait until `pulse-api`, `pulse-web`, workers, `pulse-timescale`, `pulse-redpanda`, and `pulse-redis` are live.
+6. Open **pulse-api** → **Shell** and run DB migrate/seed once:
 
 ```bash
-pnpm dlx vercel link
-# choose root directory apps/web when prompted, or:
-pnpm dlx vercel --cwd apps/web
+pnpm --filter @pulse/db migrate:prod
 ```
 
-### Point API CORS at Vercel
+7. Open the **pulse-web** URL (e.g. `https://pulse-web.onrender.com`).
+8. Optional: set `SLACK_WEBHOOK_URL` / `ALERT_WEBHOOK_URL` on **pulse-alerter** (Blueprint marks them as dashboard secrets).
 
-On the **API** host, set:
+If your API public URL is not exactly `https://pulse-api.onrender.com` (custom name/region), update `NEXT_PUBLIC_API_BASE_URL` on **pulse-web** and redeploy web.
 
-```env
-CORS_ORIGIN=https://your-app.vercel.app
-CORS_ALLOW_VERCEL=true
-```
+#### What the Blueprint starts
 
-`CORS_ALLOW_VERCEL=true` also allows `https://*.vercel.app` preview deployments.
+| Service | Role |
+|---------|------|
+| `pulse-web` | Next.js dashboard (public) |
+| `pulse-api` | Control-plane API + SSE (public) |
+| `pulse-scheduler` / `probe` / `ingestor` / `alerter` | Background workers |
+| `pulse-timescale` | TimescaleDB (private) |
+| `pulse-redpanda` | Kafka-compatible bus (private) |
+| `pulse-redis` | Redis / Key Value |
 
-### Backend (required for a working demo)
+Files: `render.yaml`, `deploy/Dockerfile`, `deploy/render-start.sh`.
 
-Keep using Compose on a VM, or any process host that can run:
+---
+
+### Alternative: Vercel dashboard only
+
+Use this if you only want the UI on Vercel and will host API/workers elsewhere.
+
+1. [vercel.com/new](https://vercel.com/new) → import repo.
+2. **Root Directory:** `apps/web`
+3. Env: `NEXT_PUBLIC_API_BASE_URL=https://<your-public-api>`
+4. On the API host: `CORS_ALLOW_VERCEL=true` and your Vercel origin in `CORS_ORIGIN`
+
+---
+
+### Local / VM Docker Compose
 
 ```bash
 pnpm dev:stack:force
 # or: docker compose -f deploy/docker-compose.yml up
 ```
 
-Expose **API port 3000** (or your reverse proxy HTTPS URL) to the internet, then set that URL as `NEXT_PUBLIC_API_BASE_URL` on Vercel.
-
-| Path | Status |
-|------|--------|
-| `deploy/docker-compose.yml` | Local / VM full stack |
-| `deploy/init-db.sh` | Container bootstrap helper |
-| `deploy/helm/`, `deploy/k8s/` | Placeholders |
-| `apps/web/vercel.json` | Vercel monorepo install/build |
+| Path | Purpose |
+|------|---------|
+| `deploy/docker-compose.yml` | Local full stack |
+| `render.yaml` | Render full-stack Blueprint |
+| `apps/web/vercel.json` | Vercel web-only config |
 
 Production-style multi-region would run separate probe processes per `REGION` instead of `REGION=all`.
 
@@ -389,8 +389,9 @@ Production-style multi-region would run separate probe processes per `REGION` in
 |---------|-----|
 | Docker / DB unreachable | Start Docker Desktop; `pnpm dev:stack:down` then `pnpm dev:stack:force` |
 | Port already in use | `pnpm dev:stack:force` |
-| Dashboard `Failed to fetch` | Use `http://localhost:3005` locally; on Vercel set `NEXT_PUBLIC_API_BASE_URL` and API `CORS_ALLOW_VERCEL=true` |
-| Only us-east has samples | Probe must run with `REGION=all` (set by `dev-stack.ps1`) |
+| Dashboard `Failed to fetch` | Local: use `localhost:3005`. Render: confirm `NEXT_PUBLIC_API_BASE_URL` and API CORS. Vercel: set API base + `CORS_ALLOW_VERCEL=true` |
+| Render migrate errors | Wait for `pulse-timescale` healthy, then Shell on `pulse-api`: `pnpm --filter @pulse/db migrate:prod` |
+| Only us-east has samples | Probe must run with `REGION=all` (set by `dev-stack.ps1` / Render probe worker) |
 | No Slack delivery | Alerter running? Notifier saved or env URL set? Incident actually opened? |
 | Vercel build fails on pnpm | Root Directory must be `apps/web`; lockfile `pnpm-lock.yaml` should be committed |
 

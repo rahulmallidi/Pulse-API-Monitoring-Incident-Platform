@@ -14,7 +14,14 @@ function resolveCorsOrigin():
   const allowVercel =
     process.env.CORS_ALLOW_VERCEL === "true" ||
     configuredOrigins.some((origin) => origin.includes("vercel.app"));
-  const exact = new Set([...defaultOrigins, ...configuredOrigins.filter((o) => !o.includes("*"))]);
+  const exact = new Set(
+    [...defaultOrigins, ...configuredOrigins.filter((o) => !o.includes("*"))].map((origin) => {
+      if (origin.startsWith("http://") || origin.startsWith("https://")) {
+        return origin;
+      }
+      return `https://${origin}`;
+    })
+  );
 
   return (origin, callback) => {
     if (!origin) {

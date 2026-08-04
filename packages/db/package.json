@@ -16,7 +16,8 @@
     "schema:relational": "node ./scripts/apply-relational-migrations.js",
     "timescale:migrate": "node ./scripts/run-timescale-migrations.js",
     "seed:demo": "node ./scripts/seed-demo.js",
-    "bootstrap": "node ./scripts/bootstrap-db.js"
+    "bootstrap": "node ./scripts/bootstrap-db.js",
+    "migrate:prod": "node ./scripts/migrate-prod.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
