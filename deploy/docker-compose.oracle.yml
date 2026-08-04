@@ -1,9 +1,9 @@
 # Oracle / cloud-friendly Compose stack.
-# Only API (:3000) and web (:3005) are published. DB/Redis/Kafka stay internal.
+# Pre-install deps + build web on the host/bootstrap script BEFORE `up`.
+# Only API (:3000) and web (:3005) are published.
 #
-# Usage on the VM:
-#   export PUBLIC_HOST=http://YOUR_PUBLIC_IP
-#   docker compose -f deploy/docker-compose.oracle.yml up -d
+#   echo "PUBLIC_HOST=http://YOUR_PUBLIC_IP" > .env
+#   docker compose -f deploy/docker-compose.oracle.yml --env-file .env up -d
 
 services:
   postgres:
@@ -59,11 +59,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        pnpm --filter @pulse/contracts build
-        pnpm --filter @pulse/runtime build
-        pnpm --filter @pulse/db exec prisma generate
-        pnpm --filter @pulse/db build
         pnpm --filter @pulse/api exec nest start
     environment:
       PORT: "3000"
@@ -95,11 +90,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        pnpm --filter @pulse/contracts build
-        pnpm --filter @pulse/runtime build
-        pnpm --filter @pulse/db exec prisma generate
-        pnpm --filter @pulse/db build
         pnpm --filter @pulse/scheduler exec nest start
     environment:
       PORT: "3002"
@@ -125,9 +115,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        pnpm --filter @pulse/contracts build
-        pnpm --filter @pulse/runtime build
         pnpm --filter @pulse/probe exec nest start
     environment:
       PORT: "3001"
@@ -151,11 +138,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        pnpm --filter @pulse/contracts build
-        pnpm --filter @pulse/runtime build
-        pnpm --filter @pulse/db exec prisma generate
-        pnpm --filter @pulse/db build
         pnpm --filter @pulse/ingestor exec nest start
     environment:
       PORT: "3003"
@@ -181,12 +163,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        pnpm --filter @pulse/contracts build
-        pnpm --filter @pulse/runtime build
-        pnpm --filter @pulse/core build
-        pnpm --filter @pulse/db exec prisma generate
-        pnpm --filter @pulse/db build
         pnpm --filter @pulse/alerter exec nest start
     environment:
       PORT: "3004"
@@ -212,9 +188,6 @@ services:
       - -c
       - |
         corepack enable
-        pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false
-        export NEXT_PUBLIC_API_BASE_URL="${PUBLIC_HOST}:3000"
-        pnpm --filter @pulse/web build
         pnpm --filter @pulse/web start
     environment:
       PORT: "3005"

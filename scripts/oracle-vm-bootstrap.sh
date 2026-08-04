@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Run ON the Oracle Ubuntu VM after SSH.
-# Installs Docker, clones/updates Pulse, starts the oracle compose stack, bootstraps DB.
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/rahulmallidi/Pulse-API-Monitoring-Incident-Platform.git}"
@@ -23,9 +22,15 @@ if ! command -v docker >/dev/null 2>&1; then
   sudo usermod -aG docker "$USER" || true
 fi
 
+if ! command -v git >/dev/null 2>&1; then
+  sudo apt-get update -y
+  sudo apt-get install -y git
+fi
+
 echo "==> Fetching repo"
 if [ -d "$REPO_DIR/.git" ]; then
-  git -C "$REPO_DIR" pull --ff-only || true
+  git -C "$REPO_DIR" fetch origin
+  git -C "$REPO_DIR" reset --hard origin/main
 else
   git clone "$REPO_URL" "$REPO_DIR"
 fi
@@ -43,18 +48,39 @@ fi
 
 export PUBLIC_HOST="http://${PUBLIC_IP}"
 echo "    PUBLIC_HOST=${PUBLIC_HOST}"
+# Persist for compose / future shells
+echo "PUBLIC_HOST=${PUBLIC_HOST}" | sudo tee /etc/pulse-public-host.env >/dev/null
+echo "PUBLIC_HOST=${PUBLIC_HOST}" > "$REPO_DIR/.env"
 
-# Open host firewall if ufw is active (OCI security list is still required)
 if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow 22/tcp || true
   sudo ufw allow 3000/tcp || true
   sudo ufw allow 3005/tcp || true
 fi
 
-echo "==> Starting Compose stack (first boot can take several minutes)"
-sudo mkdir -p /usr/local/lib/docker/cli-plugins || true
-sudo docker compose -f "$COMPOSE_FILE" pull || true
-sudo PUBLIC_HOST="$PUBLIC_HOST" docker compose -f "$COMPOSE_FILE" up -d
+echo "==> Stopping any previous stack"
+sudo docker compose -f "$COMPOSE_FILE" --env-file "$REPO_DIR/.env" down || true
+
+echo "==> Cleaning shared node_modules lock conflicts"
+sudo rm -rf "$REPO_DIR/node_modules" "$REPO_DIR/apps/"*/node_modules "$REPO_DIR/packages/"*/node_modules "$REPO_DIR/.pnpm-store" || true
+
+echo "==> Installing dependencies once (shared volume)"
+sudo docker run --rm \
+  -v "$REPO_DIR:/workspace" \
+  -w /workspace \
+  node:20-bookworm-slim \
+  sh -c "corepack enable && pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false && pnpm --filter @pulse/contracts build && pnpm --filter @pulse/runtime build && pnpm --filter @pulse/core build && pnpm --filter @pulse/db exec prisma generate && pnpm --filter @pulse/db build"
+
+echo "==> Building Next.js with public API URL"
+sudo docker run --rm \
+  -e "NEXT_PUBLIC_API_BASE_URL=${PUBLIC_HOST}:3000" \
+  -v "$REPO_DIR:/workspace" \
+  -w /workspace \
+  node:20-bookworm-slim \
+  sh -c "corepack enable && pnpm --filter @pulse/web build"
+
+echo "==> Starting Compose stack"
+sudo docker compose -f "$COMPOSE_FILE" --env-file "$REPO_DIR/.env" up -d
 
 echo "==> Waiting for Postgres"
 for i in $(seq 1 60); do
@@ -64,22 +90,22 @@ for i in $(seq 1 60); do
   sleep 3
 done
 
-echo "==> Bootstrapping database (via api container network)"
-# Wait until workspace install has at least started and postgres is reachable from a one-off node container
+echo "==> Bootstrapping database"
+NET="$(sudo docker inspect pulse-postgres -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}')"
 sudo docker run --rm \
-  --network "$(sudo docker inspect pulse-postgres -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}')" \
+  --network "$NET" \
   -e DATABASE_URL="postgresql://pulse:pulse@pulse-postgres:5432/pulse?schema=public" \
   -v "$REPO_DIR:/workspace" \
   -w /workspace/packages/db \
   node:20-bookworm-slim \
-  sh -c "corepack enable && pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false && pnpm migrate:prod"
+  sh -c "corepack enable && pnpm migrate:prod"
 
 echo ""
 echo "============================================================"
-echo " Pulse is starting."
+echo " Pulse should be up."
 echo " Dashboard: ${PUBLIC_HOST}:3005"
 echo " API:       ${PUBLIC_HOST}:3000/health"
 echo "============================================================"
-echo "If the UI shows Failed to fetch, wait 2–5 minutes for first pnpm install/build,"
-echo "then: sudo docker compose -f $COMPOSE_FILE logs -f web api"
+echo "Check status: sudo docker compose -f $COMPOSE_FILE ps"
+echo "Logs:         sudo docker compose -f $COMPOSE_FILE logs -f api web"
 echo ""
