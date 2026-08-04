@@ -50,7 +50,7 @@ services:
       - PLAINTEXT://redpanda:9092
 
   api:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-api
     restart: unless-stopped
     working_dir: /workspace
@@ -58,6 +58,7 @@ services:
       - sh
       - -c
       - |
+        apt-get update -y && apt-get install -y openssl ca-certificates >/dev/null
         corepack enable
         pnpm --filter @pulse/api exec nest start
     environment:
@@ -81,7 +82,7 @@ services:
         condition: service_started
 
   scheduler:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-scheduler
     restart: unless-stopped
     working_dir: /workspace
@@ -89,6 +90,7 @@ services:
       - sh
       - -c
       - |
+        apt-get update -y && apt-get install -y openssl ca-certificates >/dev/null
         corepack enable
         pnpm --filter @pulse/scheduler exec nest start
     environment:
@@ -106,7 +108,7 @@ services:
       - api
 
   probe:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-probe
     restart: unless-stopped
     working_dir: /workspace
@@ -129,7 +131,7 @@ services:
       - scheduler
 
   ingestor:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-ingestor
     restart: unless-stopped
     working_dir: /workspace
@@ -137,6 +139,7 @@ services:
       - sh
       - -c
       - |
+        apt-get update -y && apt-get install -y openssl ca-certificates >/dev/null
         corepack enable
         pnpm --filter @pulse/ingestor exec nest start
     environment:
@@ -154,7 +157,7 @@ services:
       - probe
 
   alerter:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-alerter
     restart: unless-stopped
     working_dir: /workspace
@@ -162,6 +165,7 @@ services:
       - sh
       - -c
       - |
+        apt-get update -y && apt-get install -y openssl ca-certificates >/dev/null
         corepack enable
         pnpm --filter @pulse/alerter exec nest start
     environment:
@@ -179,7 +183,7 @@ services:
       - probe
 
   web:
-    image: node:20-bookworm-slim
+    image: node:20-bookworm
     container_name: pulse-web
     restart: unless-stopped
     working_dir: /workspace

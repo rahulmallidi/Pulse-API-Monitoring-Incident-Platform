@@ -68,15 +68,15 @@ echo "==> Installing dependencies once (shared volume)"
 sudo docker run --rm \
   -v "$REPO_DIR:/workspace" \
   -w /workspace \
-  node:20-bookworm-slim \
-  sh -c "corepack enable && pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false && pnpm --filter @pulse/contracts build && pnpm --filter @pulse/runtime build && pnpm --filter @pulse/core build && pnpm --filter @pulse/db exec prisma generate && pnpm --filter @pulse/db build"
+  node:20-bookworm \
+  sh -c "apt-get update -y && apt-get install -y openssl ca-certificates && corepack enable && pnpm install --frozen-lockfile=false --config.confirmModulesPurge=false && pnpm --filter @pulse/contracts build && pnpm --filter @pulse/runtime build && pnpm --filter @pulse/core build && pnpm --filter @pulse/db exec prisma generate && pnpm --filter @pulse/db build"
 
 echo "==> Building Next.js with public API URL"
 sudo docker run --rm \
   -e "NEXT_PUBLIC_API_BASE_URL=${PUBLIC_HOST}:3000" \
   -v "$REPO_DIR:/workspace" \
   -w /workspace \
-  node:20-bookworm-slim \
+  node:20-bookworm \
   sh -c "corepack enable && pnpm --filter @pulse/web build"
 
 echo "==> Starting Compose stack"
@@ -97,8 +97,8 @@ sudo docker run --rm \
   -e DATABASE_URL="postgresql://pulse:pulse@pulse-postgres:5432/pulse?schema=public" \
   -v "$REPO_DIR:/workspace" \
   -w /workspace/packages/db \
-  node:20-bookworm-slim \
-  sh -c "corepack enable && pnpm migrate:prod"
+  node:20-bookworm \
+  sh -c "apt-get update -y && apt-get install -y openssl ca-certificates >/dev/null && corepack enable && pnpm migrate:prod"
 
 echo ""
 echo "============================================================"
