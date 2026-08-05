@@ -1,310 +1,70 @@
 ﻿# Pulse — API Monitoring & Incident Platform
 
-Self-hosted, multi-region API monitoring: schedule probes, ingest samples into TimescaleDB, open incidents with vendor correlation, stream live results to a Next.js ops dashboard, and notify Slack/webhooks.
+Multi-region API monitoring platform: schedule probes, store samples in TimescaleDB, open incidents with vendor correlation, stream live results to an ops dashboard, and notify Slack/webhooks.
 
-Built as a **pnpm + Turborepo** monorepo (NestJS workers + Next.js 14).
+TypeScript monorepo — **pnpm + Turborepo**, NestJS workers, Next.js 14 dashboard.
+
+**Live (Oracle Cloud Always Free VM)**
+
+| | |
+|--|--|
+| Dashboard | http://150.136.95.182:3005 |
+| API health | http://150.136.95.182:3000/health |
+| OpenAPI | http://150.136.95.182:3000/openapi |
+
+> Public IP is ephemeral — if SSH or the UI stops working, check the current IP in the OCI Console.
+
+Demo tenant: `11111111-1111-1111-1111-111111111111` (`demo-acme`)  
+Probe regions: `us-east`, `eu-west`, `ap-south`
 
 ---
 
-## Architecture (high level)
+## Architecture
 
 ![Pulse system architecture](images/architecture.png)
 
-```text
-Browser (Next.js :3005)
-        │  REST + SSE
-        ▼
-   API (:3000) ── Redis SUBSCRIBE live.probes ──► SSE /live/probes
-        │
-        │  Prisma (checks, incidents, notifiers)
-        ▼
- PostgreSQL 16 + TimescaleDB
-        ▲
-        │  INSERT samples
-   Ingestor (:3003) ◄── Kafka probes.results ──┐
-        │                                       │
-        │  PUBLISH live.probes                  │
-        ▼                                       │
-      Redis 7                                   │
-                                                │
-   Scheduler (:3002) ──► probes.jobs.{region} ──► Probe (:3001)
-        │                     (us-east|eu-west|ap-south)     │
-        │  Statuspage poll → vendor_* tables                 │
-        ▼                                                    │
-   Alerter (:3004) ◄── probes.results ───────────────────────┘
-        │  Redis dedup · Prisma incidents · Slack/webhook
-        └──► Kafka alerts.raised  (topic reserved; no consumer yet)
-```
-
-**Regions:** `us-east`, `eu-west`, `ap-south`. Locally one probe with `REGION=all` consumes all three job topics.
-
-Demo tenant ID (seed + dashboard): `11111111-1111-1111-1111-111111111111`  
-Demo tenant slug: `demo-acme`
-
 ---
 
-## Repository structure
-
-```text
-apps/
-  api/          Control-plane REST, metrics, SSE, notifiers, OpenAPI
-  probe/        Kafka consumer → HTTP/TCP/DNS/synthetic executors → results
-  scheduler/    Interval job dispatch + Statuspage poller + demo seed
-  ingestor/     Persist samples to Timescale + Redis live fanout
-  alerter/      Fingerprint/dedupe → incidents + Slack/webhook delivery
-  web/          Next.js ops dashboard (/) + public status stub (/status)
-packages/
-  contracts/    Zod schemas for checks, samples, incidents, Kafka events
-  core/         SLO math + alert fingerprinting (unit-tested)
-  db/           Prisma schema, Timescale SQL migrations, bootstrap/seed
-  runtime/      Kafka/Redis factories, env schema, topic names
-  ui/           Shared React primitives (not wired into web yet)
-deploy/         docker-compose, init-db.sh, Helm/K8s placeholders
-benchmarks/     k6 health throughput starter
-docs/           architecture, SLO, anomaly notes
-images/         architecture diagram for README
-scripts/        dev-stack.ps1, smoke-e2e.ps1
-```
-
-### Package dependency graph
-
-```text
-@pulse/web          → (HTTP only) @pulse/api
-@pulse/api          → contracts, db, runtime
-@pulse/probe        → contracts, runtime
-@pulse/scheduler    → contracts, db, runtime
-@pulse/ingestor     → contracts, db, runtime
-@pulse/alerter      → contracts, core, db, runtime
-@pulse/core         → (pure TS, no workspace deps)
-@pulse/contracts    → zod
-@pulse/db           → @prisma/client, pg
-@pulse/runtime      → kafkajs, ioredis, zod
-```
-
-### Kafka / Redis map
-
-| Channel | Type | Producer | Consumer |
-|---------|------|----------|----------|
-| `probes.jobs.us-east` / `eu-west` / `ap-south` | Kafka | scheduler | probe |
-| `probes.results` | Kafka | probe | ingestor **and** alerter |
-| `alerts.raised` | Kafka | alerter | *(none yet)* |
-| `incidents.events` | Kafka | *(reserved)* | — |
-| `live.probes` | Redis pub/sub | ingestor | api → SSE |
-| `alert:fingerprint:*` | Redis key TTL 300s | alerter | alerter (dedup) |
-| `probe:baseline-ok:*` | Redis key TTL 120s | alerter | alerter (noise suppress) |
-| `statuspage:summary:*` | Redis cache 45s | scheduler | scheduler |
-
----
-
-## Tech stack
+## Stack
 
 | Layer | Choice |
 |-------|--------|
-| Language | TypeScript (strict) |
-| Workspace | pnpm 9 + Turborepo |
 | Services | NestJS 10 |
-| Dashboard | Next.js 14 App Router + Tailwind |
-| Metadata DB | PostgreSQL 16 (Prisma) |
+| Dashboard | Next.js 14 + Tailwind |
+| Metadata | PostgreSQL 16 (Prisma) |
 | Time-series | TimescaleDB (`samples` hypertable + continuous aggregates) |
-| Bus | Redpanda (Kafka API) via kafkajs |
-| Cache / fanout | Redis 7 via ioredis |
+| Bus | Redpanda (Kafka API) |
+| Cache / live fanout | Redis 7 |
 | Validation | Zod (`@pulse/contracts`) |
 | Tests | Vitest (`@pulse/core`, `@pulse/contracts`) |
 
 ---
 
-## Prerequisites
+## Repository layout
 
-- Node.js **20+**
-- pnpm **9** (`corepack enable`)
-- Docker Desktop (Postgres / Redis / Redpanda)
-- Windows: PowerShell for `pnpm dev:stack*` scripts
-
----
-
-## Setup
-
-### 1. Install
-
-```bash
-pnpm install
-```
-
-### 2. Environment
-
-Copy `.env.example` → `.env` if you want local overrides. Host-mode stack scripts set the critical vars for you:
-
-| Variable | Default / meaning |
-|----------|-------------------|
-| `DATABASE_URL` | `postgresql://pulse:pulse@localhost:5432/pulse?schema=public` |
-| `REDIS_URL` | `redis://localhost:6379` |
-| `KAFKA_BROKERS` | `localhost:9092` |
-| `REGION` | `all` (probe consumes all region topics) |
-| `CORS_ORIGIN` | `http://localhost:3005,http://127.0.0.1:3005` |
-| `CORS_ALLOW_VERCEL` | `false` locally; `true` when dashboard is on Vercel |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:3000` (on Vercel: your public API origin) |
-| `SLACK_WEBHOOK_URL` / `ALERT_WEBHOOK_URL` | optional alerter fallbacks |
-| `NEXT_PUBLIC_*_API_URL` | optional path overrides (see `.env.example`) |
-
-### 3. Start everything (recommended)
-
-```bash
-pnpm dev:stack
-```
-
-What this does:
-
-1. Optionally frees ports **3000–3005**
-2. `docker compose up -d` for **postgres / redis / redpanda** only
-3. Bootstraps DB (Prisma push + Timescale migrations + demo seed) unless `-SkipBootstrap`
-4. Runs all apps via Turbo in one terminal
-
-Variants:
-
-```bash
-pnpm dev:stack:fast    # skip DB bootstrap
-pnpm dev:stack:force   # force-kill stale port holders, then fast start
-pnpm dev:stack:down    # stop infra containers
-```
-
-### 4. Manual bootstrap (if needed)
-
-```bash
-pnpm --filter @pulse/db bootstrap
-```
-
-Steps: `prisma generate` → schema push → Timescale SQL → `seed-demo`.
-
-### 5. Open
-
-| Surface | URL |
-|---------|-----|
-| Dashboard | http://localhost:3005 |
-| Public status | http://localhost:3005/status |
-| API health | http://localhost:3000/health |
-| OpenAPI | http://localhost:3000/openapi |
-
-Service health ports: probe `3001`, scheduler `3002`, ingestor `3003`, alerter `3004`.
-
-> Prefer **`http://localhost:3005`** (not `127.0.0.1`) so CORS matches defaults.
-
-### Full Docker Compose (apps in containers)
-
-```bash
-cd deploy
-docker compose up
-```
-
-Starts infra **and** all Node services with bind-mounted source. Host-mode `dev:stack` is usually faster for day-to-day work.
-
----
-
-## Important code paths
-
-Keep these in mind when navigating — not an exhaustive file list.
-
-| Concern | Where |
-|---------|--------|
-| Zod event/check schemas | `packages/contracts/src/index.ts` |
-| Kafka topic names + env | `packages/runtime/src/index.ts` |
-| SLO + fingerprint helpers | `packages/core/src/{slo,fingerprint}.ts` |
-| Job dispatch loop (5s) | `apps/scheduler/src/jobs/jobs.service.ts` |
-| Probe executors | `apps/probe/src/executors/*` |
-| Sample write + Redis publish | `apps/ingestor/src/samples/samples.service.ts` |
-| Alert eval → incident → notify | `apps/alerter/src/alerts/{alerts,delivery}.service.ts` |
-| Metrics SQL (summary/series/heatmap/regional) | `apps/api/src/metrics/metrics.service.ts` |
-| SSE bridge | `apps/api/src/live/live.service.ts` |
-| Dashboard + notifiers UI | `apps/web/app/components/operations-dashboard.tsx` |
-| Prisma models | `packages/db/prisma/schema.prisma` |
-| Timescale hypertable | `packages/db/migrations/timescale/001_init_timescale.sql` |
-
-### Control-plane API (tenant header)
-
-Most routes require header:
-
-```http
-x-tenant-id: 11111111-1111-1111-1111-111111111111
-```
-
-| Area | Routes |
-|------|--------|
-| Checks | `GET/POST /checks`, `GET /checks/:id` |
-| Incidents | `GET /incidents`, `PATCH /incidents/:id/state`, `POST /incidents/:id/updates` |
-| Live | `GET /live/probes` (SSE) |
-| Metrics | `GET /metrics/{summary,latency-series,heatmap,regional}` |
-| Notifiers | `GET/POST /notifiers`, `POST /notifiers/:id/test`, `DELETE /notifiers/:id` |
-
-Metrics query params: `range` (`1h|24h|7d|30d`), `region`, `serviceGroup`, `environment`, `points`.
-
----
-
-## Alerting (Slack / webhook)
-
-1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) → **Incoming Webhooks** → copy URL.
-2. Dashboard → **Alerts** tab → type **Slack** → paste URL → **Add** → **Test**.
-3. Or set `SLACK_WEBHOOK_URL` / `ALERT_WEBHOOK_URL` and restart the alerter.
-
-Delivery runs when the alerter **opens** an incident (after Redis fingerprint dedup).
-
----
-
-## Tests & benchmarks
-
-### Unit tests
-
-```bash
-pnpm test:unit
-# or
-pnpm --filter @pulse/core test
-pnpm --filter @pulse/contracts test
-```
-
-Covers SLO / burn-rate math, alert fingerprints + dedupe window, and Zod contract envelopes.
-
-### Load starter (optional)
-
-Install [k6](https://k6.io/), then:
-
-```bash
-k6 run benchmarks/probe-throughput.js
-```
-
-### Smoke e2e
-
-```bash
-pnpm smoke:e2e
-```
-
-Creates a deliberately failing check, waits for an incident, checks SSE.  
-Default script base URL is `http://localhost:3100` — pass your API port if different:
-
-```powershell
-powershell -File ./scripts/smoke-e2e.ps1 -ApiBaseUrl http://localhost:3000
+```text
+apps/
+  api/          REST, metrics, SSE, notifiers, OpenAPI
+  probe/        Regional probe workers (HTTP / TCP / DNS / synthetic)
+  scheduler/    Job dispatch + Statuspage poller
+  ingestor/     Sample write + Redis live fanout
+  alerter/      Fingerprint dedupe → incidents → Slack/webhook
+  web/          Ops dashboard
+packages/
+  contracts/    Zod schemas
+  core/         SLO math + alert fingerprinting
+  db/           Prisma + Timescale migrations
+  runtime/      Kafka / Redis / env helpers
+deploy/         Docker Compose (local + Oracle)
+docs/           Architecture notes, deploy guide, benchmark results
+scripts/        Local stack + Oracle bootstrap
 ```
 
 ---
 
-## Database notes
+## Deploy (Oracle Cloud)
 
-**Prisma (relational):** tenants, users, checks, incidents, updates, notifiers, alert rules, maintenance windows, SLOs, vendor_* correlation tables.
-
-**Timescale:** `samples` hypertable keyed by `(check_id, region, time)`; continuous aggregates `samples_1m/5m/1h/1d`; compression after 7d; retention 180d; timing columns from migration `002`.
-
----
-
-## Deploy
-
-### Recommended free path: Oracle Cloud Always Free VM
-
-Run **frontend + backend on one free cloud VM** (not on your laptop).
-
-Full guide: **[docs/deploy-oracle.md](docs/deploy-oracle.md)**
-
-Short version:
-
-1. Create an Always Free **Ampere (ARM)** Ubuntu VM in Oracle Cloud  
-2. Open security-list ports **22, 3000, 3005**  
-3. SSH in and run:
+Full guide: [docs/deploy-oracle.md](docs/deploy-oracle.md)
 
 ```bash
 git clone https://github.com/rahulmallidi/Pulse-API-Monitoring-Incident-Platform.git
@@ -313,67 +73,86 @@ chmod +x scripts/oracle-vm-bootstrap.sh
 ./scripts/oracle-vm-bootstrap.sh
 ```
 
-4. Open `http://YOUR_PUBLIC_IP:3005`
-
----
-
-### Paid PaaS: Render (Blueprint)
-
-Pulse needs long-running workers, Redis, Kafka (Redpanda), and TimescaleDB. **Render Blueprints** can host that from `render.yaml` on a **paid Starter** plan (not free).
-
-1. Open [https://dashboard.render.com/blueprints/new](https://dashboard.render.com/blueprints/new)  
-2. Connect this GitHub repo → Apply `render.yaml`  
-3. Enter the **same** `POSTGRES_PASSWORD` wherever prompted  
-4. If needed, Shell on `pulse-api`: `pnpm --filter @pulse/db migrate:prod`
-
----
-
-### Alternative: Vercel dashboard only
-
-UI on Vercel; API/workers must still run elsewhere (e.g. Oracle VM).
-
-1. [vercel.com/new](https://vercel.com/new) → import repo → Root Directory `apps/web`  
-2. Env: `NEXT_PUBLIC_API_BASE_URL=http://YOUR_ORACLE_IP:3000`  
-3. API: `CORS_ALLOW_VERCEL=true` + your Vercel origin in `CORS_ORIGIN`
-
----
-
-### Local Docker / dev stack
+Open ports **22 / 3000 / 3005** on the VCN security list. After bootstrap:
 
 ```bash
-pnpm dev:stack:force
-# or: docker compose -f deploy/docker-compose.yml up
+sudo docker compose -f deploy/docker-compose.oracle.yml ps
+sudo docker compose -f deploy/docker-compose.oracle.yml logs -f api web
 ```
-
-| Path | Purpose |
-|------|---------|
-| `docs/deploy-oracle.md` | Free full-stack on Oracle VM |
-| `deploy/docker-compose.oracle.yml` | Cloud VM Compose file |
-| `scripts/oracle-vm-bootstrap.sh` | One-shot VM bootstrap |
-| `render.yaml` | Render Blueprint (paid) |
-| `apps/web/vercel.json` | Vercel web-only config |
 
 ---
 
-## Implementation status
+## Local development
 
-**Done**
+**Requirements:** Node 20+, pnpm 9, Docker
 
-- End-to-end probe pipeline (schedule → probe → ingest → metrics/SSE)
-- Multi-region job topics with local `REGION=all` consumer
-- Incidents + Redis dedup + Slack/webhook notifiers
-- Statuspage vendor correlation inputs
-- Ops dashboard (latency, heatmap, regional, env/region filters, alerts tab)
-- Shared contracts/core/runtime/db packages + Vitest coverage on core monitoring logic
+```bash
+pnpm install
+pnpm dev:stack          # Postgres / Redis / Redpanda + all apps
+pnpm dev:stack:fast     # skip DB bootstrap
+pnpm dev:stack:force    # free ports, then fast start
+pnpm dev:stack:down     # stop infra
+```
 
-**Next**
+| Surface | URL |
+|---------|-----|
+| Dashboard | http://localhost:3005 |
+| API health | http://localhost:3000/health |
+| OpenAPI | http://localhost:3000/openapi |
 
-- Maintenance windows enforced in alerter/scheduler
-- Persisted SLO CRUD APIs
-- Email notifiers
-- Blast-radius / dependency graph
-- CI + Testcontainers integration tests
-- Consume / act on `alerts.raised` and `incidents.events`
+---
+
+## API (control plane)
+
+Most routes require:
+
+```http
+x-tenant-id: 11111111-1111-1111-1111-111111111111
+```
+
+| Area | Routes |
+|------|--------|
+| Checks | `GET/POST /checks`, `GET /checks/:id` |
+| Incidents | `GET /incidents`, `PATCH /incidents/:id/state` |
+| Live | `GET /live/probes` (SSE) |
+| Metrics | `GET /metrics/{summary,latency-series,heatmap,regional}` |
+| Notifiers | `GET/POST /notifiers`, `POST /notifiers/:id/test` |
+
+---
+
+## Alerting
+
+Dashboard → **Alerts** → add a Slack or webhook notifier → **Test**.  
+Delivery runs when the alerter opens an incident (Redis fingerprint dedup).
+
+Optional env fallbacks: `SLACK_WEBHOOK_URL`, `ALERT_WEBHOOK_URL`.
+
+---
+
+## Tests & benchmarks
+
+```bash
+pnpm test:unit    # @pulse/core + @pulse/contracts
+pnpm bench        # microbench + live API metrics (stack must be up)
+```
+
+**Unit tests** (2026-08-05):
+
+| Package | Result | Line coverage |
+|---------|--------|--------------:|
+| `@pulse/core` | 8 passed | 84.84% |
+| `@pulse/contracts` | 3 passed | 100% |
+
+**Benchmark** (same date, local stack):
+
+| Metric | Result |
+|--------|--------|
+| Alert fingerprint | ~259K ops/sec |
+| `GET /health` p95 | ~69 ms (0 failures) |
+| Samples / 24h | 45,389 across 3 regions |
+| Probe p95 / uptime | ~1958 ms / ~87.6% |
+
+Full JSON: [docs/benchmark-results.json](docs/benchmark-results.json)
 
 ---
 
@@ -381,16 +160,9 @@ pnpm dev:stack:force
 
 | Symptom | Fix |
 |---------|-----|
-| Docker / DB unreachable | Start Docker Desktop; `pnpm dev:stack:down` then `pnpm dev:stack:force` |
-| Port already in use | `pnpm dev:stack:force` |
-| Dashboard `Failed to fetch` | Local: use `localhost:3005`. Render: confirm `NEXT_PUBLIC_API_BASE_URL` and API CORS. Vercel: set API base + `CORS_ALLOW_VERCEL=true` |
-| Render migrate errors | Wait for `pulse-timescale` healthy, then Shell on `pulse-api`: `pnpm --filter @pulse/db migrate:prod` |
-| Only us-east has samples | Probe must run with `REGION=all` (set by `dev-stack.ps1` / Render probe worker) |
-| No Slack delivery | Alerter running? Notifier saved or env URL set? Incident actually opened? |
-| Vercel build fails on pnpm | Root Directory must be `apps/web`; lockfile `pnpm-lock.yaml` should be committed |
+| SSH timeout | Confirm instance **Running**, current public IP, security-list TCP **22** |
+| UI / API unreachable | Security-list TCP **3000** / **3005**; `docker compose … ps` |
+| `cannot drop table samples` | Pull latest `main`, re-run bootstrap (Timescale caggs handled before Prisma push) |
+| No Slack alerts | Alerter up? Notifier saved? Incident actually opened? |
 
----
-
-## License / attribution
-
-Probe targets and Statuspage hosts: see `SOURCE.md`.
+Probe targets / Statuspage hosts: see [SOURCE.md](SOURCE.md).

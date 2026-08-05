@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-08-05T01:34:12.435Z",
+  "machine": {
+    "platform": "win32",
+    "node": "v25.0.0"
+  },
+  "unitTests": {
+    "note": "Run separately via pnpm test:unit",
+    "packages": [
+      "@pulse/core",
+      "@pulse/contracts"
+    ]
+  },
+  "microbenchmarks": [
+    {
+      "name": "alert_fingerprint_sha256",
+      "iterations": 50000,
+      "elapsedMs": 193.32,
+      "opsPerSec": 258642
+    },
+    {
+      "name": "slo_burn_rate_eval",
+      "iterations": 100000,
+      "elapsedMs": 5.89,
+      "opsPerSec": 16983407
+    },
+    {
+      "name": "json_sample_parse_roundtrip",
+      "iterations": 20000,
+      "elapsedMs": 103.18,
+      "opsPerSec": 193833
+    }
+  ],
+  "live": {
+    "apiBase": "http://localhost:3000",
+    "healthLatency": {
+      "count": 80,
+      "avgMs": 40.857,
+      "p50Ms": 28.094,
+      "p95Ms": 69.068,
+      "p99Ms": 69.709,
+      "failures": 0,
+      "concurrency": 20,
+      "path": "/health"
+    },
+    "metricsLatency": {
+      "count": 40,
+      "avgMs": 210.476,
+      "p50Ms": 151.727,
+      "p95Ms": 557.398,
+      "p99Ms": 589.778,
+      "failures": 0,
+      "concurrency": 10,
+      "path": "/metrics/summary?range=24h&region=all&serviceGroup=all"
+    },
+    "sampleVolume24h": 45389,
+    "uptimePct24h": 87.59,
+    "p95LatencyMs24h": 1958,
+    "regionsActive": 3,
+    "regionalBreakdown": [
+      {
+        "region": "us-east",
+        "sampleCount": 15165,
+        "p95": 1781,
+        "uptimePct": 87.59
+      },
+      {
+        "region": "eu-west",
+        "sampleCount": 15118,
+        "p95": 1786,
+        "uptimePct": 87.62
+      },
+      {
+        "region": "ap-south",
+        "sampleCount": 15106,
+        "p95": 2020,
+        "uptimePct": 87.55
+      }
+    ]
+  }
+}

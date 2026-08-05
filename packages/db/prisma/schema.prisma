@@ -188,3 +188,26 @@ model Slo {
   @@index([tenantId])
   @@map("slos")
 }
+
+/// Probe samples hypertable — created/owned by Timescale SQL migrations.
+/// Declared here so `prisma db push` does not try to DROP it.
+model Sample {
+  time                   DateTime  @map("time") @db.Timestamptz(6)
+  checkId                String    @map("check_id") @db.Uuid
+  region                 String
+  ok                     Boolean
+  latencyMs              Float     @map("latency_ms")
+  statusCode             Int?      @map("status_code")
+  error                  String?
+  sizeBytes              Int?      @map("size_bytes")
+  dnsMs                  Float?    @map("dns_ms")
+  connectMs              Float?    @map("connect_ms")
+  tlsMs                  Float?    @map("tls_ms")
+  ttfbMs                 Float?    @map("ttfb_ms")
+  downloadMs             Float?    @map("download_ms")
+  tlsExpiresAt           DateTime? @map("tls_expires_at") @db.Timestamptz(6)
+  assertionFailuresJsonb Json?     @map("assertion_failures_jsonb")
+
+  @@id([checkId, region, time])
+  @@map("samples")
+}

@@ -14,6 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push --accept-data-loss",
     "schema:relational": "node ./scripts/apply-relational-migrations.js",
+    "timescale:drop-caggs": "node ./scripts/drop-timescale-caggs.js",
     "timescale:migrate": "node ./scripts/run-timescale-migrations.js",
     "seed:demo": "node ./scripts/seed-demo.js",
     "bootstrap": "node ./scripts/bootstrap-db.js",

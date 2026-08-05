@@ -122,6 +122,7 @@ sudo docker compose -f deploy/docker-compose.oracle.yml down
 | SSH times out | Public IP + ingress TCP 22 on security list |
 | Site not loading | Ingress TCP 3000/3005; `docker compose ps` shows healthy |
 | `Failed to fetch` in UI | Confirm `PUBLIC_HOST` / `NEXT_PUBLIC_API_BASE_URL` use the **current** public IP |
+| `cannot drop table samples` during migrate | Pull latest `main` and re-run bootstrap (drops Timescale caggs before Prisma push, then recreates them) |
 | Out of Always Free capacity | Try another OCI region (e.g. Phoenix, Chicago, Frankfurt) |
 | ARM image pull errors | Re-run bootstrap; images used here support `linux/arm64` |
 

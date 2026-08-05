@@ -11,6 +11,8 @@ function run(command, args) {
   }
 }
 
+// Continuous aggregates block DROP TABLE samples during force-reset.
+run("node", ["./scripts/drop-timescale-caggs.js"]);
 run("pnpm", ["prisma", "generate"]);
 run("pnpm", ["prisma", "db", "push", "--force-reset", "--accept-data-loss"]);
 run("node", ["./scripts/run-timescale-migrations.js"]);

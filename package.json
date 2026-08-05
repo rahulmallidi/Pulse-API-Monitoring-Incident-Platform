@@ -14,6 +14,7 @@
     "smoke:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/smoke-e2e.ps1",
     "test": "turbo run test",
     "test:unit": "pnpm --filter @pulse/core test && pnpm --filter @pulse/contracts test",
+    "bench": "node benchmarks/local-bench.mjs",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

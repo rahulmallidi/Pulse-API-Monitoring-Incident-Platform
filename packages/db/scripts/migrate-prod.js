@@ -1,6 +1,10 @@
 /**
  * Production-safe DB bootstrap (no force-reset).
- * prisma generate → db push → timescale SQL → demo seed
+ * Drop Timescale caggs → prisma generate → db push → timescale SQL → demo seed
+ *
+ * Continuous aggregates are dropped first so Prisma never hits
+ * "cannot drop table samples because other objects depend on it".
+ * They are recreated by the Timescale migrations (idempotent).
  */
 const { spawnSync } = require("child_process");
 
@@ -19,6 +23,7 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+run("node", ["./scripts/drop-timescale-caggs.js"]);
 run("pnpm", ["prisma", "generate"]);
 run("pnpm", ["prisma", "db", "push", "--accept-data-loss"]);
 run("node", ["./scripts/run-timescale-migrations.js"]);
